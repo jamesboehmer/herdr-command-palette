@@ -38,6 +38,13 @@ Anything that closes or destroys something asks for confirmation first (`server
 stop` wants you to type `stop`), and a built-in that fails shows herdr's own error
 instead of the overlay just vanishing.
 
+"Start an agent…" splits the current pane and runs what you typed in the new one,
+rather than calling `herdr agent start` — that command's contract changed in herdr
+0.8 (it now activates an *existing* pane via `--kind`/`--pane`), while `pane split`
+plus `pane run` behave the same on 0.7 and 0.8. It also means your answer is parsed
+by the new pane's shell, so `claude --append-system-prompt "be concise"` keeps its
+quoting. herdr detects the agent once it's running.
+
 ### What's deliberately not there
 
 Two families of built-in can't work from a palette, so they're left out rather
@@ -59,12 +66,18 @@ than shipped broken:
 
 ## Requirements
 
-- [herdr](https://herdr.dev) ≥ 0.7.0
+- [herdr](https://herdr.dev) ≥ 0.7.0 (built-ins verified against 0.7.x and 0.8.x)
 - [`fzf`](https://github.com/junegunn/fzf)
 - [`jq`](https://jqlang.github.io/jq/)
+- `bash` ≥ 3.2 — macOS's system bash is fine
 
 `less` and `column`, if present, are used to page and align the read-only built-ins
 (worktree list, integration status…); without them the output is printed as-is.
+
+Prompts that offer a default put it on the input line for editing where `read -i`
+is available (bash ≥ 4). On bash 3.2, which macOS still ships as `/bin/bash`, the
+default is shown in the prompt instead — `pane name [my-pane] ▸` — and enter
+accepts it.
 
 ## Install
 

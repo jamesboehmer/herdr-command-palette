@@ -70,13 +70,30 @@ page() {
   fi
 }
 
-# Read one line from the overlay's TTY. Empty input means "cancel".
+# `read -i`, which puts an editable default on the input line, is bash 4+. macOS
+# still ships bash 3.2 as /bin/bash, where it fails as an invalid option — and a
+# failed `read` looks exactly like "the user cancelled", so every defaulted prompt
+# would quietly drop its action. Detect it once and offer the default in the label
+# instead, where pressing enter accepts it.
+if [ "${BASH_VERSINFO[0]:-0}" -ge 4 ]; then
+  readline_default=true
+else
+  readline_default=false
+fi
+
+# Read one line from the overlay's TTY. Empty input means "cancel"; where a default
+# is offered, enter accepts it instead (true of both branches — with `read -i` the
+# default is already on the line, so enter returns it). To cancel a defaulted
+# prompt, clear the line first, or press ctrl-c.
 prompt() {
   local label="$1" default="${2:-}" ans
-  if [ -n "$default" ]; then
-    IFS= read -r -e -i "$default" -p "$label" ans </dev/tty || return 1
+  if [ -n "$default" ] && [ "$readline_default" = true ]; then
+    IFS= read -r -e -i "$default" -p "$label ▸ " ans </dev/tty || return 1
+  elif [ -n "$default" ]; then
+    IFS= read -r -e -p "$label [$default] ▸ " ans </dev/tty || return 1
+    [ -n "$ans" ] || ans="$default"
   else
-    IFS= read -r -e -p "$label" ans </dev/tty || return 1
+    IFS= read -r -e -p "$label ▸ " ans </dev/tty || return 1
   fi
   [ -n "$ans" ] || return 1
   printf '%s' "$ans"
@@ -85,7 +102,7 @@ prompt() {
 # Same, but an empty answer is a legitimate "leave it unset" rather than a cancel.
 prompt_optional() {
   local ans
-  IFS= read -r -e -p "$1" ans </dev/tty || return 1
+  IFS= read -r -e -p "$1 ▸ " ans </dev/tty || return 1
   printf '%s' "$ans"
 }
 
@@ -103,7 +120,7 @@ pick() {
   [ -n "$lines" ] || die "command-palette: nothing to pick from."
   sel="$(
     printf '%s\n' "$lines" \
-      | fzf --delimiter=$'\t' --with-nth=2 --prompt="$label" \
+      | fzf --delimiter=$'\t' --with-nth=2 --prompt="$label ▸ " \
             --reverse --cycle --no-multi --no-sort
   )" || return 1
   [ -n "$sel" ] || return 1
@@ -288,7 +305,7 @@ run_builtin() {
       local pane label current
       pane="$(target_pane)"
       current="$(run_herdr pane get "$pane" | jq -r '.result.pane.label // empty')"
-      label="$(prompt 'pane name ▸ ' "$current")" || return 1
+      label="$(prompt 'pane name' "$current")" || return 1
       run_herdr pane rename "$pane" "$label" >/dev/null ;;
     herdr:pane.rename-clear)
       run_herdr pane rename "$(target_pane)" --clear >/dev/null ;;
@@ -307,7 +324,7 @@ run_builtin() {
           tab_rows "$ws" | awk -F'\t' -v w="$label" '{ printf "%s\t%s  ·  %s\n", $1, w, $2 }'
         done <<< "$(workspace_rows)"
       )"
-      tab="$(pick 'move pane to tab ▸ ' "$rows")" || return 1
+      tab="$(pick 'move pane to tab' "$rows")" || return 1
       run_herdr pane move "$pane" --tab "$tab" --split right --focus >/dev/null ;;
     herdr:pane.move-to-new-tab)
       run_herdr pane move "$(target_pane)" --new-tab --workspace "$(target_workspace)" --focus >/dev/null ;;
@@ -320,13 +337,13 @@ run_builtin() {
     herdr:tab.new-named)
       local ws label
       ws="$(target_workspace)"
-      label="$(prompt 'new tab name ▸ ')" || return 1
+      label="$(prompt 'new tab name')" || return 1
       run_herdr tab create --workspace "$ws" --cwd "$origin_cwd" --label "$label" --focus >/dev/null ;;
     herdr:tab.rename)
       local tab label current
       tab="$(target_tab)"
       current="$(run_herdr tab get "$tab" | jq -r '.result.tab.label // empty')"
-      label="$(prompt 'tab name ▸ ' "$current")" || return 1
+      label="$(prompt 'tab name' "$current")" || return 1
       run_herdr tab rename "$tab" "$label" >/dev/null ;;
     herdr:tab.close)
       local tab
@@ -345,7 +362,7 @@ run_builtin() {
       run_herdr tab focus "$next" >/dev/null ;;
     herdr:tab.switch)
       local tab
-      tab="$(pick 'switch to tab ▸ ' "$(tab_rows "$(target_workspace)")")" || return 1
+      tab="$(pick 'switch to tab' "$(tab_rows "$(target_workspace)")")" || return 1
       run_herdr tab focus "$tab" >/dev/null ;;
 
     # workspaces
@@ -353,7 +370,7 @@ run_builtin() {
       run_herdr workspace create --cwd "$origin_cwd" --focus >/dev/null ;;
     herdr:workspace.new-path)
       local path
-      path="$(prompt 'new workspace directory ▸ ' "$origin_cwd")" || return 1
+      path="$(prompt 'new workspace directory' "$origin_cwd")" || return 1
       path="$(expand_path "$path")"
       [ -d "$path" ] || die "command-palette: not a directory: ${path}"
       run_herdr workspace create --cwd "$path" --focus >/dev/null ;;
@@ -361,7 +378,7 @@ run_builtin() {
       local ws label current
       ws="$(target_workspace)"
       current="$(run_herdr workspace get "$ws" | jq -r '.result.workspace.label // empty')"
-      label="$(prompt 'workspace name ▸ ' "$current")" || return 1
+      label="$(prompt 'workspace name' "$current")" || return 1
       run_herdr workspace rename "$ws" "$label" >/dev/null ;;
     herdr:workspace.close)
       local ws
@@ -370,7 +387,7 @@ run_builtin() {
       run_herdr workspace close "$ws" >/dev/null ;;
     herdr:workspace.switch)
       local ws
-      ws="$(pick 'switch to workspace ▸ ' "$(workspace_rows)")" || return 1
+      ws="$(pick 'switch to workspace' "$(workspace_rows)")" || return 1
       run_herdr workspace focus "$ws" >/dev/null ;;
     herdr:workspace.next | herdr:workspace.previous)
       local ws next offset=1
@@ -386,8 +403,8 @@ run_builtin() {
     herdr:worktree.create)
       local ws branch base
       ws="$(target_workspace)"
-      branch="$(prompt 'new worktree branch ▸ ')" || return 1
-      base="$(prompt_optional 'base ref (blank = current HEAD) ▸ ')" || return 1
+      branch="$(prompt 'new worktree branch')" || return 1
+      base="$(prompt_optional 'base ref (blank = current HEAD)')" || return 1
       set -- worktree create --workspace "$ws" --branch "$branch" --focus
       [ -n "$base" ] && set -- "$@" --base "$base"
       run_herdr "$@" >/dev/null ;;
@@ -403,7 +420,7 @@ run_builtin() {
                         + "  ·  " + .path)
                      ] | @tsv'
       )"
-      path="$(pick 'open worktree ▸ ' "$rows")" || return 1
+      path="$(pick 'open worktree' "$rows")" || return 1
       run_herdr worktree open --workspace "$ws" --path "$path" --focus >/dev/null ;;
     herdr:worktree.remove)
       local ws branch
@@ -429,23 +446,30 @@ run_builtin() {
 
     # agents
     herdr:agent.start)
-      local ws cmd name
-      ws="$(target_workspace)"
-      cmd="$(prompt 'agent command ▸ ' 'claude')" || return 1
-      name="${cmd%% *}"
-      name="${name##*/}"
-      # Intentional word splitting: the answer is a command line, not one argv entry.
-      # shellcheck disable=SC2086
-      run_herdr agent start "$name" --cwd "$origin_cwd" --workspace "$ws" \
-        --split right --focus -- $cmd >/dev/null ;;
+      local pane cmd new_pane
+      pane="$(target_pane)"
+      cmd="$(prompt 'agent command' 'claude')" || return 1
+      # Deliberately NOT `herdr agent start`. That command's contract changed in
+      # herdr 0.8 — it now activates an existing pane (`--kind KIND --pane ID`) and
+      # no longer accepts --cwd/--workspace/--split — whereas `pane split` followed
+      # by `pane run` behaves the same on 0.7 and 0.8. It also hands the answer to
+      # the new pane's own shell as a command line, so quotes and globs mean what
+      # the user typed instead of being word-split and glob-expanded by us. herdr
+      # picks the agent up on its own once it's running.
+      new_pane="$(
+        run_herdr pane split "$pane" --direction right --cwd "$origin_cwd" --focus \
+          | jq -r '.result.pane.pane_id // empty'
+      )"
+      [ -n "$new_pane" ] || die "command-palette: herdr did not report a new pane id."
+      run_herdr pane run "$new_pane" "$cmd" >/dev/null ;;
     herdr:agent.focus)
       local pane
-      pane="$(pick 'focus agent ▸ ' "$(agent_rows)")" || return 1
+      pane="$(pick 'focus agent' "$(agent_rows)")" || return 1
       run_herdr agent focus "$pane" >/dev/null ;;
     herdr:agent.rename)
       local pane name
-      pane="$(pick 'rename agent ▸ ' "$(agent_rows)")" || return 1
-      name="$(prompt 'agent name ▸ ')" || return 1
+      pane="$(pick 'rename agent' "$(agent_rows)")" || return 1
+      name="$(prompt 'agent name')" || return 1
       run_herdr agent rename "$pane" "$name" >/dev/null ;;
 
     # server & maintenance
@@ -453,18 +477,18 @@ run_builtin() {
       run_herdr server reload-config >/dev/null ;;
     herdr:server.stop)
       local answer
-      answer="$(prompt "Stop the herdr server? Every pane in every workspace will be killed. Type 'stop' to confirm ▸ ")" || return 1
+      answer="$(prompt "Stop the herdr server? Every pane in every workspace will be killed. Type 'stop' to confirm")" || return 1
       [ "$answer" = "stop" ] || return 1
       run_herdr server stop >/dev/null ;;
     herdr:integration.status)
       page "$(run_herdr integration status)" ;;
     herdr:integration.install)
       local name
-      name="$(pick 'install integration ▸ ' "$(integration_rows)")" || return 1
+      name="$(pick 'install integration' "$(integration_rows)")" || return 1
       page "$(run_herdr integration install "$name")" ;;
     herdr:integration.uninstall)
       local name
-      name="$(pick 'uninstall integration ▸ ' "$(integration_rows)")" || return 1
+      name="$(pick 'uninstall integration' "$(integration_rows)")" || return 1
       confirm "Uninstall the ${name} integration?" || return 1
       page "$(run_herdr integration uninstall "$name")" ;;
     herdr:channel.show)
@@ -472,7 +496,7 @@ run_builtin() {
     herdr:channel.set)
       local channel
       channel="$(
-        pick 'update channel ▸ ' "$(printf 'stable\tstable — normal releases\npreview\tpreview — opt-in preview builds\n')"
+        pick 'update channel' "$(printf 'stable\tstable — normal releases\npreview\tpreview — opt-in preview builds\n')"
       )" || return 1
       page "$(run_herdr channel set "$channel")" ;;
     herdr:config.reset-keys)
