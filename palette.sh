@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pane `jt.command-palette.palette`: the interactive fzf picker.
+# Pane `jamesboehmer.command-palette.palette`: the interactive fzf picker.
 #
 # Runs inside an overlay pane (real TTY). Lists herdr's own built-in actions plus
 # every action from every installed plugin, lets the user fuzzy-pick one, and runs
@@ -14,7 +14,7 @@
 set -uo pipefail
 
 herdr_bin="${HERDR_BIN_PATH:-herdr}"
-self_plugin="${HERDR_PLUGIN_ID:-jt.command-palette}"
+self_plugin="${HERDR_PLUGIN_ID:-jamesboehmer.command-palette}"
 
 # ── plumbing ────────────────────────────────────────────────────────────────
 
@@ -140,7 +140,8 @@ pick() {
 #   2. HERDR_PLUGIN_CONTEXT_JSON — set by herdr in every plugin pane, and its
 #      `focused_pane_id` is the origin pane (the one the overlay covers), not us.
 #      This keeps the palette working when the pane is opened directly, e.g.
-#      `herdr plugin pane open --plugin jt.command-palette --entrypoint palette`.
+#      `herdr plugin pane open --plugin jamesboehmer.command-palette
+#       --entrypoint palette`.
 ctx="${HERDR_PLUGIN_CONTEXT_JSON:-}"
 ctx_field() {
   [ -n "$ctx" ] || return 0
@@ -591,9 +592,9 @@ fi
 
 # Pull the run's log_id and owning plugin straight from the invoke response (the
 # plugin_id is taken from the response rather than split off the action_id, which
-# can itself contain dots, e.g. jt.command-palette). If the response isn't the
-# shape we expect (older herdr), skip polling and exit cleanly — never make a
-# working invoke look broken.
+# can itself contain dots, e.g. jamesboehmer.command-palette). If the response
+# isn't the shape we expect (older herdr), skip polling and exit cleanly — never
+# make a working invoke look broken.
 log_id="$(printf '%s' "$resp" | jq -r '.result.log.log_id // empty' 2>/dev/null)"
 plugin_id="$(printf '%s' "$resp" | jq -r '.result.log.plugin_id // empty' 2>/dev/null)"
 [ -n "$log_id" ] && [ -n "$plugin_id" ] || exit 0

@@ -1,14 +1,14 @@
-id = "jt.command-palette"
+id = "jamesboehmer.command-palette"
 name = "Command Palette (fzf)"
 version = "0.1.0"
 min_herdr_version = "0.7.0"
-description = "An fzf command palette for herdr: pops up a fuzzy-searchable list of herdr's own built-in actions (split a pane, new tab, switch workspace, git worktrees, agents, server config…) plus every action exposed by every installed plugin, and runs the one you pick. Built-ins go straight to the socket API via the herdr CLI, prompting for a name or offering a second picker where one is needed; plugin actions are dispatched with `herdr plugin action invoke`. The picker runs in an overlay pane so fzf gets a real TTY; the origin pane, tab, workspace and cwd are forwarded so both kinds of action resolve the place you opened the palette from."
+description = "Every herdr action in one palette — all of herdr's built-in core API actions (split a pane, new tab, switch workspace, git worktrees, agents, server config…) and every action exposed by every installed plugin, in a single fuzzy-searchable fzf popup: pick one and it runs. Built-ins go straight to the socket API via the herdr CLI, prompting for a name or offering a second picker where one is needed; plugin actions are dispatched with `herdr plugin action invoke`. The picker runs in an overlay pane so fzf gets a real TTY; the origin pane, tab, workspace and cwd are forwarded so both kinds of action resolve the place you opened the palette from."
 platforms = ["linux", "macos"]
 
 # The user-facing entry point. Herdr qualifies it globally as
-# `jt.command-palette.open`. Like every action, its command is run by the herdr
-# server WITHOUT a TTY, so it cannot run fzf itself — instead it opens the
-# `palette` overlay pane (below), which is where the interactive picker lives.
+# `jamesboehmer.command-palette.open`. Like every action, its command is run by
+# the herdr server WITHOUT a TTY, so it cannot run fzf itself — instead it opens
+# the `palette` overlay pane (below), which is where the interactive picker lives.
 # cwd defaults to the plugin root for actions, so the relative `open.sh` resolves.
 [[actions]]
 id = "open"
@@ -33,5 +33,5 @@ command = ["bash", "-c", "exec \"$HERDR_PLUGIN_ROOT/palette.sh\""]
 #   [[keys.command]]
 #   key = "prefix+p"
 #   type = "plugin_action"
-#   command = "jt.command-palette.open"
+#   command = "jamesboehmer.command-palette.open"
 #   description = "Command palette"

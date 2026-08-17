@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Action `jt.command-palette.open`: open the fzf command-palette overlay.
+# Action `jamesboehmer.command-palette.open`: open the fzf command-palette overlay.
 #
 # This runs on the herdr server (no TTY), so it can't run fzf directly. It opens
 # the `palette` overlay pane (see herdr-plugin.toml), which gets a real terminal
@@ -35,7 +35,7 @@ fi
 [ -n "$repo" ] || repo="${HERDR_WORKSPACE_CWD:-}"
 
 set -- plugin pane open \
-  --plugin jt.command-palette \
+  --plugin jamesboehmer.command-palette \
   --entrypoint palette \
   --placement overlay \
   --focus

@@ -1,10 +1,10 @@
 # herdr-command-palette
 
-An [fzf](https://github.com/junegunn/fzf) **command palette** for [herdr](https://herdr.dev).
+**Every herdr action in one palette — all of herdr's built-in core API actions *and* every action exposed by every installed plugin.**
 
-Press a key, get a fuzzy-searchable popup of **herdr's own built-in actions** plus
-**every action exposed by every installed plugin**, pick one, and it runs. No more
-remembering which key is bound to what.
+An [fzf](https://github.com/junegunn/fzf) **command palette** for
+[herdr](https://herdr.dev): press a key, get a fuzzy-searchable popup of the lot,
+pick one, and it runs. No more remembering which key is bound to what.
 
 ```
 herdr action ▸ tab
@@ -82,13 +82,13 @@ accepts it.
 ## Install
 
 ```bash
-herdr plugin install JanTvrdik/herdr-command-palette
+herdr plugin install jamesboehmer/herdr-command-palette
 ```
 
 …or, for local development:
 
 ```bash
-git clone https://github.com/JanTvrdik/herdr-command-palette
+git clone https://github.com/jamesboehmer/herdr-command-palette
 herdr plugin link ./herdr-command-palette
 ```
 
@@ -101,7 +101,7 @@ your `~/.config/herdr/config.toml` and reload:
 [[keys.command]]
 key = "prefix+p"
 type = "plugin_action"
-command = "jt.command-palette.open"
+command = "jamesboehmer.command-palette.open"
 description = "Command palette"
 ```
 
@@ -116,10 +116,10 @@ Now `prefix` (Ctrl+B by default) then `p` opens the palette.
 herdr actions run on the server with **no TTY**, so an action can't run fzf
 directly. Instead:
 
-1. The `jt.command-palette.open` action opens an **overlay pane** — a temporary
-   popup over the active pane, which *does* get a TTY. The originating workspace's
-   cwd is forwarded via `--cwd`, and the origin pane, tab and workspace ids are
-   forwarded as `HERDR_PALETTE_ORIGIN_*` env vars.
+1. The `jamesboehmer.command-palette.open` action opens an **overlay pane** — a
+   temporary popup over the active pane, which *does* get a TTY. The originating
+   workspace's cwd is forwarded via `--cwd`, and the origin pane, tab and
+   workspace ids are forwarded as `HERDR_PALETTE_ORIGIN_*` env vars.
 2. Inside the overlay, [`palette.sh`](palette.sh) merges its own catalog of herdr
    built-ins with `herdr plugin action list`, formats each entry as
    `<id> <title>`, and pipes it to `fzf`.
