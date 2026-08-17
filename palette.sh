@@ -115,13 +115,15 @@ confirm() {
 }
 
 # Second-level picker. Input is TSV lines: field 1 is the value, field 2 the label.
+# Sorting is left on for the same reason as the main picker below: with an empty
+# query fzf keeps the order we fed it, and once you type it ranks by match quality.
 pick() {
   local label="$1" lines="$2" sel
   [ -n "$lines" ] || die "command-palette: nothing to pick from."
   sel="$(
     printf '%s\n' "$lines" \
       | fzf --delimiter=$'\t' --with-nth=2 --prompt="$label ▸ " \
-            --reverse --cycle --no-multi --no-sort
+            --reverse --cycle --no-multi
   )" || return 1
   [ -n "$sel" ] || return 1
   printf '%s' "${sel%%$'\t'*}"
@@ -528,10 +530,10 @@ plugin_lines="$(
 )"
 
 # Built-ins first, in catalog order — grouped by pane/tab/workspace/worktree/agent/
-# server, with the plain form of an action ahead of its variants. Sorting the whole
-# list alphabetically instead would rank "New tab, named…" above "New tab", since
-# `--no-sort` leaves fzf showing matches in input order. Plugin actions follow,
-# sorted, as before.
+# server, with the plain form of an action ahead of its variants. That order is what
+# you see with an empty query, and it's the final tiebreak between two entries fzf
+# scores identically; sorting the list alphabetically instead would put "New tab,
+# named…" above "New tab". Plugin actions follow, sorted, as before.
 lines="$(
   builtin_catalog | awk -F'\t' 'NF > 1 { printf "%s\t%s %s\n", $1, $1, $2 }'
   [ -n "$plugin_lines" ] && printf '%s\n' "$plugin_lines" | sort -t$'\t' -k2,2
@@ -540,7 +542,17 @@ lines="$(
 [ -n "$lines" ] || die "command-palette: no actions available."
 
 # fzf: display only field 2, but match against the whole line (so typing a plugin
-# id works too). Esc/Ctrl-C abort → empty selection → silent close.
+# id works too).
+#
+# Sorting is deliberately left ON. `--no-sort` makes fzf list matches in input
+# order, so a query is only ever a filter: typing "rename pane" ranked "Move pane
+# to a new tab" (which merely holds those letters, scattered) above "Rename pane…"
+# whenever the loose match sat earlier in the catalog. With sorting on, fzf's own
+# scoring — which rewards contiguous, word-boundary matches and, all else equal,
+# the shorter entry — floats the complete match to the top, and input order still
+# decides an exact tie. An empty query is unaffected: fzf shows catalog order.
+#
+# Esc/Ctrl-C abort → empty selection → silent close.
 choice="$(
   printf '%s\n' "$lines" \
     | fzf --delimiter=$'\t' \
@@ -549,8 +561,7 @@ choice="$(
           --header='↑↓ select · enter run · esc cancel · “…” asks for input' \
           --reverse \
           --cycle \
-          --no-multi \
-          --no-sort
+          --no-multi
 )" || true
 
 [ -n "$choice" ] || exit 0
