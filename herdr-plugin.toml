@@ -27,11 +27,11 @@ title = "Command palette"
 placement = "overlay"
 command = ["bash", "-c", "exec \"$HERDR_PLUGIN_ROOT/palette.sh\""]
 
-# NOTE: herdr 0.7 does NOT bind keys declared in a plugin manifest. Bind a key in
+# NOTE: herdr does NOT bind keys declared in a plugin manifest. Bind a key in
 # your ~/.config/herdr/config.toml instead, then `herdr server reload-config`:
 #
 #   [[keys.command]]
-#   key = "prefix+p"
+#   key = "prefix+shift+p"
 #   type = "plugin_action"
 #   command = "jamesboehmer.command-palette.open"
 #   description = "Command palette"

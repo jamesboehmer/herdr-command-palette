@@ -23,6 +23,27 @@ Built-in entries are prefixed `herdr:`; plugin actions keep their
 path at a text prompt (pre-filled with the current value, so you can edit it), or
 a second fzf picker to choose which tab, workspace, worktree or agent.
 
+Entries that also have a keyboard shortcut show it, dimmed, in a column on the
+right, with `prefix+` written out as your prefix key (`ctrl+b c` for "New tab").
+herdr's socket API doesn't report the live keymap, so it's read from the config
+herdr loads (`$HERDR_CONFIG_PATH`, else `$XDG_CONFIG_HOME/herdr/config.toml`, else
+`~/.config/herdr/config.toml`) layered over herdr's defaults. That covers built-ins
+with a native binding and plugin actions bound through `[[keys.command]]` with
+`type = "plugin_action"`.
+
+Where two bindings claim one key, only the one herdr honours is shown:
+
+- anything in your `config.toml` beats a herdr default — binding the palette to
+  `prefix+shift+p` takes that key from "Rename pane";
+- between two entries in `config.toml`, herdr's own verdict from `herdr config
+  check` decides: a `[keys]` entry beats a `[[keys.command]]`, and an earlier
+  `[[keys.command]]` beats a later one on the same key;
+- a config herdr can't parse is ignored in favour of the defaults, as herdr does.
+
+Config edits show up the next time the palette opens, even before `herdr server
+reload-config` applies them. Shortcuts are display-only: typing `ctrl` in the query
+doesn't match them.
+
 ## Built-in actions
 
 | Group | Actions |
@@ -94,12 +115,12 @@ herdr plugin link ./herdr-command-palette
 
 ## Bind a key
 
-herdr 0.7 does not bind keys declared in a plugin manifest, so add a binding to
+herdr plugins can't declare keybindings in their manifest, so add a binding to
 your `~/.config/herdr/config.toml` and reload:
 
 ```toml
 [[keys.command]]
-key = "prefix+p"
+key = "prefix+shift+p"
 type = "plugin_action"
 command = "jamesboehmer.command-palette.open"
 description = "Command palette"
@@ -109,7 +130,10 @@ description = "Command palette"
 herdr server reload-config
 ```
 
-Now `prefix` (Ctrl+B by default) then `p` opens the palette.
+Now `prefix` (Ctrl+B by default) then `P` opens the palette. That takes the key
+from herdr's default "Rename pane" binding, which stays reachable from the palette;
+bind `rename_pane` under `[keys]` if you want a key for it too. (`prefix+p` is
+herdr's "Previous tab".)
 
 ## How it works
 

@@ -190,38 +190,42 @@ target_workspace() { require "$origin_workspace" "workspace"; }
 #     focus or swap that does land leaves the tab zoomed on the target once the
 #     overlay tears down. All of these are natively keybound anyway — prefix+z,
 #     prefix+h/j/k/l, prefix+r.
+#
+# Columns: id, title, and — where herdr has a native key for the same action — the
+# name of that binding in the `[keys]` table of config.toml, so the palette can show
+# the shortcut next to the entry (see keybindings below).
 builtin_catalog() {
   cat <<'EOF'
-herdr:pane.split-right	Split pane right
-herdr:pane.split-down	Split pane down
-herdr:pane.rename	Rename pane…
+herdr:pane.split-right	Split pane right	split_vertical
+herdr:pane.split-down	Split pane down	split_horizontal
+herdr:pane.rename	Rename pane…	rename_pane
 herdr:pane.rename-clear	Clear pane name
-herdr:pane.close	Close pane
+herdr:pane.close	Close pane	close_pane
 herdr:pane.move-to-tab	Move pane to another tab…
 herdr:pane.move-to-new-tab	Move pane to a new tab
 herdr:pane.move-to-new-workspace	Move pane to a new workspace
-herdr:tab.new	New tab
+herdr:tab.new	New tab	new_tab
 herdr:tab.new-named	New tab, named…
-herdr:tab.rename	Rename tab…
-herdr:tab.close	Close tab
-herdr:tab.next	Next tab
-herdr:tab.previous	Previous tab
-herdr:tab.switch	Switch to tab…
-herdr:workspace.new	New workspace here
+herdr:tab.rename	Rename tab…	rename_tab
+herdr:tab.close	Close tab	close_tab
+herdr:tab.next	Next tab	next_tab
+herdr:tab.previous	Previous tab	previous_tab
+herdr:tab.switch	Switch to tab…	switch_tab
+herdr:workspace.new	New workspace here	new_workspace
 herdr:workspace.new-path	New workspace in another directory…
-herdr:workspace.rename	Rename workspace…
-herdr:workspace.close	Close workspace
-herdr:workspace.switch	Switch to workspace…
-herdr:workspace.next	Next workspace
-herdr:workspace.previous	Previous workspace
-herdr:worktree.create	New git worktree…
-herdr:worktree.open	Open an existing git worktree…
-herdr:worktree.remove	Remove this workspace's git worktree
+herdr:workspace.rename	Rename workspace…	rename_workspace
+herdr:workspace.close	Close workspace	close_workspace
+herdr:workspace.switch	Switch to workspace…	workspace_picker
+herdr:workspace.next	Next workspace	next_workspace
+herdr:workspace.previous	Previous workspace	previous_workspace
+herdr:worktree.create	New git worktree…	new_worktree
+herdr:worktree.open	Open an existing git worktree…	open_worktree
+herdr:worktree.remove	Remove this workspace's git worktree	remove_worktree
 herdr:worktree.list	List git worktrees
 herdr:agent.start	Start an agent…
-herdr:agent.focus	Focus an agent…
+herdr:agent.focus	Focus an agent…	focus_agent
 herdr:agent.rename	Rename an agent…
-herdr:server.reload-config	Reload herdr config
+herdr:server.reload-config	Reload herdr config	reload_config
 herdr:server.stop	Stop the herdr server
 herdr:integration.status	Agent integration status
 herdr:integration.install	Install an agent integration…
@@ -231,6 +235,194 @@ herdr:channel.set	Set the update channel…
 herdr:config.reset-keys	Reset custom keybindings
 herdr:session.list	List herdr sessions
 EOF
+}
+
+# ── keyboard shortcuts ──────────────────────────────────────────────────────
+#
+# Prints "<name>\t<shortcut>" per bound key: `[keys]` bindings by their config name
+# (new_tab, split_vertical…) and `[[keys.command]]` plugin_action bindings by the
+# action they invoke (plugin.action). `prefix+` is spelled out as the configured
+# prefix key, e.g. "prefix+c" → "ctrl+b c".
+#
+# The socket API exposes neither the resolved keymap nor the config path, so this
+# reads the same file herdr does — $HERDR_CONFIG_PATH, else
+# $XDG_CONFIG_HOME/herdr/config.toml, else ~/.config/herdr/config.toml; the palette
+# pane inherits the server's environment, so it resolves the one the server
+# loaded — layered over herdr's defaults, which `--default-config` prints as
+# commented-out assignments. Edits not yet applied with `server reload-config`
+# show early; nothing outside herdr can tell.
+#
+# Plugin manifests can't declare keys, so every binding comes from that one file,
+# and where two claim the same key only the one herdr honours is shown:
+#   * Anything set in config.toml — a `[keys]` entry or a `[[keys.command]]` —
+#     takes the key from a herdr default silently, which is how `prefix+shift+p`
+#     opening the palette takes it from "Rename pane".
+#   * Between two config.toml entries herdr picks the winner itself and says so in
+#     `herdr config check` ("prefix+v: kept keys.new_tab, disabled keys.close_tab"):
+#     a `[keys]` entry beats a `[[keys.command]]`, and an earlier
+#     `[[keys.command]]` beats a later one. Those diagnostics are applied as-is
+#     rather than re-deriving herdr's rules here.
+#   * A config herdr can't parse is ignored in favour of the defaults, as herdr
+#     does.
+# Keys are compared normalised, so "prefix+P" and "prefix+shift+p" are one key.
+#
+# Best effort: anything unreadable just means no shortcuts, never a broken palette.
+keybindings() {
+  local config="${HERDR_CONFIG_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml}"
+  local check
+  {
+    # Uncomment only the assignments: the defaults also carry a commented-out
+    # [[keys.command]] example, which must not count as a real binding.
+    "$herdr_bin" --default-config 2>/dev/null \
+      | sed -E 's/^#[[:space:]]*([A-Za-z0-9_-]+[[:space:]]*=)/\1/'
+    if [ -r "$config" ]; then
+      # `config check` exits non-zero for key conflicts too, though the config
+      # still loads — only "using defaults" means herdr threw it away.
+      check="$("$herdr_bin" config check 2>&1)"
+      case "$check" in
+        *"using defaults"*) ;;
+        *)
+          # Marker lines (they can't occur in TOML): start of the user's file, which
+          # also resets to the top-level table; then herdr's conflict verdicts.
+          printf '\001user\n'
+          cat "$config"
+          printf '\n'
+          printf '%s\n' "$check" | awk '{ printf "\001check %s\n", $0 }'
+          ;;
+      esac
+    fi
+  } | awk '
+    # A TOML string (or array of strings), minus quotes and any trailing comment.
+    function value(v,   out, n, i, parts) {
+      sub(/^[^=]*=[ \t]*/, "", v)
+      if (v ~ /^\[/) {
+        sub(/\].*$/, "", v)
+        n = split(substr(v, 2), parts, ",")
+        for (i = 1; i <= n; i++) {
+          gsub(/^[ \t]*["\047]|["\047][ \t]*$/, "", parts[i])
+          if (parts[i] != "") out = out (out == "" ? "" : ", ") parts[i]
+        }
+        return out
+      }
+      if (v ~ /^"/) { v = substr(v, 2); sub(/".*$/, "", v); return v }
+      if (v ~ /^\047/) { v = substr(v, 2); sub(/\047.*$/, "", v); return v }
+      sub(/[ \t]*#.*$/, "", v)
+      return v
+    }
+    # Canonical form of one key, for comparison only: lower case, an upper-case
+    # letter as shift+letter, modifiers sorted (prefix first).
+    function norm(k,   n, i, j, t, last, mods, m, out, tmp) {
+      n = split(k, t, "+")
+      last = t[n]
+      if (last ~ /^[A-Z]$/) { t[n] = "shift"; n++ }
+      m = 0
+      for (i = 1; i < n; i++) {
+        t[i] = tolower(t[i])
+        if (t[i] == "prefix") t[i] = " prefix"   # sorts first
+        mods[++m] = t[i]
+      }
+      for (i = 2; i <= m; i++)
+        for (j = i; j > 1 && mods[j - 1] > mods[j]; j--) { tmp = mods[j]; mods[j] = mods[j - 1]; mods[j - 1] = tmp }
+      for (i = 1; i <= m; i++) { sub(/^ /, "", mods[i]); out = out mods[i] "+" }
+      return out tolower(last)
+    }
+    # The comma-separated keys in list, minus any equal to k.
+    function without(list, k,   n, i, parts, out) {
+      n = split(list, parts, /, /)
+      for (i = 1; i <= n; i++)
+        if (parts[i] != "" && norm(parts[i]) != norm(k)) out = out (out == "" ? "" : ", ") parts[i]
+      return out
+    }
+    function flush() {
+      if (table == "[[keys.command]]" && user && ckey != "") {
+        nc++; ck[nc] = ckey; ct[nc] = ctype; cc[nc] = ccmd
+      }
+      ctype = ccmd = ckey = ""
+    }
+    /^\001user$/ { flush(); table = ""; user = 1; next }
+    /^\001check / {
+      # "<key>: kept <entry>, disabled <entry>[, <entry>…]"
+      line = substr($0, 8)
+      if (line !~ /: kept .*, disabled /) next
+      k = line; sub(/: kept .*$/, "", k)
+      lost = line; sub(/^.*, disabled /, "", lost)
+      n = split(lost, parts, /, /)
+      for (i = 1; i <= n; i++) disabled[++nd] = k SUBSEP parts[i]
+      next
+    }
+    /^[ \t]*\[/ {
+      flush()
+      table = $0
+      sub(/[ \t]*#.*$/, "", table)
+      gsub(/[ \t]/, "", table)
+      next
+    }
+    !/^[ \t]*[A-Za-z0-9_-]+[ \t]*=/ { next }
+    {
+      name = $0
+      sub(/^[ \t]*/, "", name)
+      sub(/[ \t]*=.*$/, "", name)
+    }
+    table == "[keys]" {
+      if (user) { set[name] = 1; key[name] = value($0) } else def[name] = value($0)
+      next
+    }
+    table == "[[keys.command]]" {
+      if (name == "key") ckey = value($0)
+      else if (name == "type") ctype = value($0)
+      else if (name == "command") ccmd = value($0)
+    }
+    function add(list, k) {
+      if (prefix != "") sub(/^prefix\+/, prefix " ", k)
+      return list (list == "" ? "" : ", ") k
+    }
+    END {
+      flush()
+      # Drop what herdr disabled: "keys.<name>" or "keys.command[<0-based>].key".
+      for (d = 1; d <= nd; d++) {
+        split(disabled[d], dk, SUBSEP)
+        entry = dk[2]
+        if (entry ~ /^keys\.command\[[0-9]+\]/) {
+          i = entry; sub(/^keys\.command\[/, "", i); sub(/\].*$/, "", i); i++
+          if (i in ck) ck[i] = without(ck[i], dk[1])
+        } else if (entry ~ /^keys\.[A-Za-z0-9_-]+$/) {
+          name = substr(entry, 6)
+          if (name in set) key[name] = without(key[name], dk[1])
+        }
+      }
+      # Keys taken by an explicit config.toml entry, which a default loses to.
+      for (name in set) {
+        n = split(key[name], parts, /, /)
+        for (j = 1; j <= n; j++) if (parts[j] != "") taken[norm(parts[j])] = 1
+      }
+      for (i = 1; i <= nc; i++) {
+        n = split(ck[i], parts, /, /)
+        for (j = 1; j <= n; j++) if (parts[j] != "") taken[norm(parts[j])] = 1
+      }
+      for (name in def) {
+        if (name in set) continue
+        key[name] = ""
+        n = split(def[name], parts, /, /)
+        for (j = 1; j <= n; j++)
+          if (parts[j] != "" && !(norm(parts[j]) in taken))
+            key[name] = key[name] (key[name] == "" ? "" : ", ") parts[j]
+      }
+      prefix = (key["prefix"] != "") ? key["prefix"] : "ctrl+b"
+      for (name in key) {
+        if (name == "prefix") continue
+        out = ""
+        n = split(key[name], parts, /, /)
+        for (j = 1; j <= n; j++) if (parts[j] != "") out = add(out, parts[j])
+        if (out != "") printf "%s\t%s\n", name, out
+      }
+      for (i = 1; i <= nc; i++) {
+        if (ct[i] != "plugin_action" || cc[i] == "") continue
+        n = split(ck[i], parts, /, /)
+        for (j = 1; j <= n; j++) if (parts[j] != "") cmd[cc[i]] = add(cmd[cc[i]], parts[j])
+      }
+      for (c in cmd) printf "%s\t%s\n", c, cmd[c]
+    }
+  ' 2>/dev/null
 }
 
 # ── built-in helpers ────────────────────────────────────────────────────────
@@ -515,17 +707,18 @@ run_builtin() {
 
 # ── the picker ──────────────────────────────────────────────────────────────
 
-# Each line: "<id>\t<id> <title>". Field 1 is what we dispatch on; field 2 is what
-# fzf displays. We hide our own plugin's actions (opening the palette from the
-# palette is noise). Plugin discovery failing is not fatal — the built-ins alone
-# are still a usable palette.
+# Each row: "<id>\t<id> <title>\t<binding name>". Field 1 is what we dispatch on;
+# field 2 is what fzf displays; field 3 is looked up in keybindings to show the
+# shortcut. We hide our own plugin's actions (opening the palette from the palette
+# is noise). Plugin discovery failing is not fatal — the built-ins alone are still
+# a usable palette.
 plugin_lines="$(
   "$herdr_bin" plugin action list 2>/dev/null \
     | jq -r --arg self "$self_plugin" '
         .result.actions[]
         | select(.plugin_id != $self)
         | (.plugin_id + "." + .action_id) as $qid
-        | [ $qid, ($qid + " " + .title) ]
+        | [ $qid, ($qid + " " + .title), $qid ]
         | @tsv
       ' 2>/dev/null
 )"
@@ -535,15 +728,41 @@ plugin_lines="$(
 # you see with an empty query, and it's the final tiebreak between two entries fzf
 # scores identically; sorting the list alphabetically instead would put "New tab,
 # named…" above "New tab". Plugin actions follow, sorted, as before.
-lines="$(
-  builtin_catalog | awk -F'\t' 'NF > 1 { printf "%s\t%s %s\n", $1, $1, $2 }'
+rows="$(
+  builtin_catalog | awk -F'\t' 'NF > 1 { printf "%s\t%s %s\t%s\n", $1, $1, $2, $3 }'
   [ -n "$plugin_lines" ] && printf '%s\n' "$plugin_lines" | sort -t$'\t' -k2,2
+)"
+
+# Final lines: "<id>\t<padded id + title>\t<dimmed shortcut>". Every title is padded
+# to one width, so the tab after it lands every shortcut in the same column. Width
+# is counted in characters, not bytes (the "…" in titles is three bytes), by
+# dropping UTF-8 continuation bytes; it's capped so one long plugin title can't push
+# every shortcut off-screen.
+lines="$(
+  LC_ALL=C awk -F'\t' '
+    FILENAME == ARGV[1] { key[$1] = $2; next }
+    NF > 1 {
+      n++
+      id[n] = $1; title[n] = $2; bound[n] = ($3 != "" && ($3 in key)) ? key[$3] : ""
+      w = $2; gsub(/[\200-\277]/, "", w); width[n] = length(w)
+      if (width[n] > max) max = width[n]
+    }
+    END {
+      if (max > 80) max = 80
+      for (i = 1; i <= n; i++) {
+        pad = ""; for (j = width[i]; j < max; j++) pad = pad " "
+        printf "%s\t%s%s\t%s\n", id[i], title[i], pad,
+               (bound[i] == "" ? "" : "\033[2m" bound[i] "\033[0m")
+      }
+    }
+  ' <(keybindings) <(printf '%s\n' "$rows")
 )"
 
 [ -n "$lines" ] || die "command-palette: no actions available."
 
-# fzf: display only field 2, but match against the whole line (so typing a plugin
-# id works too).
+# fzf: display fields 2 and 3, but match only the id + title (`--nth` counts the
+# displayed fields) — typing "ctrl" shouldn't drag in every entry with a shortcut.
+# `--ansi` renders the dimmed shortcut instead of printing its escape codes.
 #
 # Sorting is deliberately left ON. `--no-sort` makes fzf list matches in input
 # order, so a query is only ever a filter: typing "rename pane" ranked "Move pane
@@ -557,7 +776,9 @@ lines="$(
 choice="$(
   printf '%s\n' "$lines" \
     | fzf --delimiter=$'\t' \
-          --with-nth=2 \
+          --with-nth=2,3 \
+          --nth=1 \
+          --ansi \
           --prompt='herdr action ▸ ' \
           --header='↑↓ select · enter run · esc cancel · “…” asks for input' \
           --reverse \
